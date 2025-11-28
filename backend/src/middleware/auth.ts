@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyToken } from "../utils/helpers";
 import prisma from "../utils/prisma";
-import { Role } from "@prisma/client";
+import { Role } from "../types";
 
 export const authenticate = async (
   req: Request,

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../utils/prisma";
 import { hashPassword, comparePassword, generateToken } from "../utils/helpers";
-import { CreateUserDto, LoginDto, Role } from "../types";
+import { CreateUserDto, LoginDto } from "../types";
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -25,7 +25,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         firstName,
         lastName,
         phone,
-        role: role || Role.CUSTOMER,
+        role: role || "CUSTOMER",
       },
       select: {
         id: true,
@@ -41,7 +41,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const token = generateToken({
       userId: user.id,
       email: user.email,
-      role: user.role,
+      role: user.role as "ADMIN" | "DISPATCHER" | "TECHNICIAN" | "CUSTOMER",
     });
 
     res.status(201).json({
@@ -82,7 +82,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const token = generateToken({
       userId: user.id,
       email: user.email,
-      role: user.role,
+      role: user.role as "ADMIN" | "DISPATCHER" | "TECHNICIAN" | "CUSTOMER",
     });
 
     res.json({
