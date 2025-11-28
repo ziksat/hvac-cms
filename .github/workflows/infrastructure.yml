@@ -1,0 +1,81 @@
+name: Infrastructure Deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infrastructure/**'
+      - '.github/workflows/infrastructure.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Validate Bicep template
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          template: ./infrastructure/main.bicep
+          parameters: ./infrastructure/parameters.${{ github.event.inputs.environment || 'dev' }}.json
+          deploymentMode: Validate
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy Bicep template
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          template: ./infrastructure/main.bicep
+          parameters: ./infrastructure/parameters.${{ github.event.inputs.environment || 'dev' }}.json
+          deploymentName: hvaccms-${{ github.run_number }}
+
+      - name: Get deployment outputs
+        id: outputs
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            outputs=$(az deployment group show \
+              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+              --name hvaccms-${{ github.run_number }} \
+              --query properties.outputs)
+            echo "outputs=$outputs" >> $GITHUB_OUTPUT
+
+      - name: Display deployment info
+        run: |
+          echo "Deployment completed successfully!"
+          echo "Outputs: ${{ steps.outputs.outputs.outputs }}"

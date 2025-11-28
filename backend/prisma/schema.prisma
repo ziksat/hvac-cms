@@ -1,0 +1,238 @@
+// This is your Prisma schema file
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model - supports all user types
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  password     String
+  firstName    String
+  lastName     String
+  phone        String?
+  role         String   @default("CUSTOMER") // ADMIN, DISPATCHER, TECHNICIAN, CUSTOMER
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  technician   Technician?
+  customer     Customer?
+
+  @@map("users")
+}
+
+// Customer model
+model Customer {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  address      String
+  city         String
+  state        String
+  zipCode      String
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs         Job[]
+  equipment    Equipment[]
+  estimates    Estimate[]
+  invoices     Invoice[]
+
+  @@map("customers")
+}
+
+// Technician model
+model Technician {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  skills          String[] @default([])
+  certifications  String[] @default([])
+  isAvailable     Boolean  @default(true)
+  currentLatitude Float?
+  currentLongitude Float?
+  lastLocationUpdate DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs            Job[]
+  locations       Location[]
+
+  @@map("technicians")
+}
+
+// Job/Work Order model
+model Job {
+  id              String    @id @default(uuid())
+  title           String
+  description     String?
+  status          String    @default("PENDING") // PENDING, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED
+  priority        Int       @default(1)
+  scheduledDate   DateTime?
+  scheduledTime   String?
+  estimatedDuration Int?     // in minutes
+  actualDuration  Int?       // in minutes
+  notes           String?
+  photos          String[]  @default([]) // URLs to Azure Blob Storage
+  parts           Json?      // parts used
+  laborCost       Float?
+  partsCost       Float?
+  totalCost       Float?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  customerId      String
+  customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  technicianId    String?
+  technician      Technician? @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+  equipmentId     String?
+  equipment       Equipment? @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  estimate        Estimate?
+  invoice         Invoice?
+
+  @@map("jobs")
+}
+
+// Estimate model
+model Estimate {
+  id              String    @id @default(uuid())
+  estimateNumber  String    @unique
+  status          String    @default("DRAFT") // DRAFT, SENT, APPROVED, REJECTED, EXPIRED
+  description     String?
+  laborCost       Float
+  partsCost       Float
+  taxRate         Float     @default(0)
+  totalCost       Float
+  validUntil      DateTime?
+  customerNotes   String?
+  internalNotes   String?
+  sentAt          DateTime?
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  customerId      String
+  customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  jobId           String?   @unique
+  job             Job?      @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  lineItems       EstimateLineItem[]
+
+  @@map("estimates")
+}
+
+// Estimate line items
+model EstimateLineItem {
+  id           String   @id @default(uuid())
+  description  String
+  quantity     Int
+  unitPrice    Float
+  totalPrice   Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  estimateId   String
+  estimate     Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@map("estimate_line_items")
+}
+
+// Invoice model
+model Invoice {
+  id              String    @id @default(uuid())
+  invoiceNumber   String    @unique
+  status          String    @default("DRAFT") // DRAFT, SENT, PAID, OVERDUE, CANCELLED
+  description     String?
+  subtotal        Float
+  taxRate         Float     @default(0)
+  taxAmount       Float
+  totalAmount     Float
+  paidAmount      Float     @default(0)
+  dueDate         DateTime?
+  paidAt          DateTime?
+  sentAt          DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  customerId      String
+  customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  jobId           String?   @unique
+  job             Job?      @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  lineItems       InvoiceLineItem[]
+
+  @@map("invoices")
+}
+
+// Invoice line items
+model InvoiceLineItem {
+  id           String   @id @default(uuid())
+  description  String
+  quantity     Int
+  unitPrice    Float
+  totalPrice   Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_line_items")
+}
+
+// Equipment model
+model Equipment {
+  id              String   @id @default(uuid())
+  name            String
+  type            String   // AC, Furnace, Heat Pump, etc.
+  brand           String?
+  model           String?
+  serialNumber    String?
+  installDate     DateTime?
+  warrantyExpiry  DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  jobs            Job[]
+
+  @@map("equipment")
+}
+
+// Location tracking model for technicians
+model Location {
+  id           String   @id @default(uuid())
+  latitude     Float
+  longitude    Float
+  heading      Float?   // direction in degrees
+  speed        Float?   // in mph
+  accuracy     Float?   // GPS accuracy in meters
+  timestamp    DateTime @default(now())
+
+  // Relations
+  technicianId String
+  technician   Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+
+  @@map("locations")
+}
